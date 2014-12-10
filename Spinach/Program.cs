@@ -39,32 +39,33 @@ namespace Spinach {
         }
 
         private static void Main(Arguments arguments) {
-            FluentConsole.Line("Loading...");
+            FluentConsole.White.Line("Loading");
             var assemblies = arguments.AssemblyPaths.Select(path => {
-                FluentConsole.White.Line("  " + path);
+                FluentConsole.Line("  " + path);
                 return new AssemblyInProgress {
                     Path = path,
                     Assembly = AssemblyDefinition.ReadAssembly(path)
                 };
             }).ToArray();
 
-            FluentConsole.Line("Signing...");
+            FluentConsole.NewLine().White.Line("Signing");
             var signed = new Dictionary<string, AssemblyDefinition>();
             foreach (var x in assemblies) {
                 var name = x.Name;
-                FluentConsole.White.Text("  {0}: ", name.Name);
+                FluentConsole.Text("  {0}: ", name.Name);
                 if (name.HasPublicKey)
                     FluentConsole.Text("rewriting public key, ");
 
+                File.Copy(x.Path, x.Path + ".backup", true);
                 WriteSigned(x.Path, x.Assembly, arguments.KeyFilePath);
                 x.Assembly = AssemblyDefinition.ReadAssembly(x.Path);
                 signed.Add(name.Name, x.Assembly);
-                FluentConsole.Green.Line("OK");
+                FluentConsole.Line("OK");
             }
 
-            FluentConsole.Line("Fixing dependencies...");
+            FluentConsole.NewLine().White.Line("References");
             foreach (var x in assemblies) {
-                FluentConsole.White.Line("  {0}", x.Name.Name);
+                FluentConsole.Line("  {0}", x.Name.Name);
                 foreach (var reference in x.Assembly.MainModule.AssemblyReferences) {
                     var @new = signed.GetValueOrDefault(reference.Name);
                     if (@new == null)
