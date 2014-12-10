@@ -32,6 +32,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="AshMind.Extensions">
+      <HintPath>..\#packages\AshMind.Extensions.1.6.0\lib\net45\AshMind.Extensions.dll</HintPath>
+    </Reference>
     <Reference Include="clipr, Version=1.4.5.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\#packages\clipr.1.4.5.0\lib\net35\clipr.dll</HintPath>

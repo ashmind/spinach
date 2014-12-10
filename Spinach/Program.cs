@@ -1,6 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
+using AshMind.Extensions;
 using clipr;
 using Mono.Cecil;
 
@@ -27,22 +30,61 @@ namespace Spinach {
             return 0;
         }
 
+        private class AssemblyInProgress {
+            public string Path { get; set; }
+            public AssemblyDefinition Assembly { get; set; }
+            public AssemblyNameDefinition Name {
+                get { return Assembly.Name; }
+            }
+        }
+
         private static void Main(Arguments arguments) {
-            foreach (var path in arguments.AssemblyPaths) {
-                FluentConsole.Text("Processing ").White.Text(path).NewLine();
-                var assembly = AssemblyDefinition.ReadAssembly(path);
-                var name = assembly.Name;
-                if (name.HasPublicKey) {
-                    FluentConsole.Yellow.Text("Assembly {0} is already signed.", path);
-                    continue;
+            FluentConsole.Line("Loading...");
+            var assemblies = arguments.AssemblyPaths.Select(path => {
+                FluentConsole.White.Line("  " + path);
+                return new AssemblyInProgress {
+                    Path = path,
+                    Assembly = AssemblyDefinition.ReadAssembly(path)
+                };
+            }).ToArray();
+
+            FluentConsole.Line("Signing...");
+            var signed = new Dictionary<string, AssemblyDefinition>();
+            foreach (var x in assemblies) {
+                var name = x.Name;
+                FluentConsole.White.Text("  {0}: ", name.Name);
+                if (name.HasPublicKey)
+                    FluentConsole.Text("rewriting public key, ");
+
+                WriteSigned(x.Path, x.Assembly, arguments.KeyFilePath);
+                x.Assembly = AssemblyDefinition.ReadAssembly(x.Path);
+                signed.Add(name.Name, x.Assembly);
+                FluentConsole.Green.Line("OK");
+            }
+
+            FluentConsole.Line("Fixing dependencies...");
+            foreach (var x in assemblies) {
+                FluentConsole.White.Line("  {0}", x.Name.Name);
+                foreach (var reference in x.Assembly.MainModule.AssemblyReferences) {
+                    var @new = signed.GetValueOrDefault(reference.Name);
+                    if (@new == null)
+                        continue;
+
+                    FluentConsole.Line("    {0} => {1}", reference.FullName, @new.FullName);
+                    reference.HasPublicKey = true;
+                    reference.PublicKey = @new.Name.PublicKey;
+                    reference.PublicKeyToken = @new.Name.PublicKeyToken;
                 }
 
-                File.Copy(path, path + ".unsigned.bak");
-                using (var keyStream = new FileStream(arguments.KeyFilePath, FileMode.Open, FileAccess.Read, FileShare.Read)) {
-                    assembly.Write(path, new WriterParameters {
-                        StrongNameKeyPair = new StrongNameKeyPair(keyStream)
-                    });
-                }
+                WriteSigned(x.Path, x.Assembly, arguments.KeyFilePath);
+            }
+        }
+
+        private static void WriteSigned(string path, AssemblyDefinition assembly, string keyFilePath) {
+            using (var keyStream = new FileStream(keyFilePath, FileMode.Open, FileAccess.Read, FileShare.Read)) {
+                assembly.Write(path, new WriterParameters {
+                    StrongNameKeyPair = new StrongNameKeyPair(keyStream)
+                });
             }
         }
     }
