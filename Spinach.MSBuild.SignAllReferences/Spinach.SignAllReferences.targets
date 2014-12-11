@@ -1,0 +1,22 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <SpinachPath>#SpinachPath#</SpinachPath>
+    <SpinachKeyPath></SpinachKeyPath>
+    <SpinachCacheDir>$(SolutionDir)\.!signed\</SpinachCacheDir>
+  </PropertyGroup>
+
+  <Target Name="SignAllReferences" BeforeTargets="Build">    
+    <MakeDir Directories="$(SpinachCacheDir)" />
+    
+    <ItemGroup>
+      <_Rewrite Include="@(Reference->'%(HintPath)')" Condition="'%(Reference.HintPath)' != ''" />
+    </ItemGroup>
+    <Exec Command="&quot;$(SpinachPath)&quot; @(_Rewrite, ' ') --key $(SpinachKeyPath) --out $(SpinachCacheDir) --skip existing" />
+
+    <ItemGroup>
+      <Reference Condition="'%(Reference.HintPath)'!=''">
+        <HintPath>$(SpinachCacheDir)$([System.IO.Path]::GetFileName(%(Reference.HintPath)))</HintPath>
+      </Reference>
+    </ItemGroup>
+  </Target>
+</Project>
