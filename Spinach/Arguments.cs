@@ -15,7 +15,7 @@ namespace Spinach {
         [NamedArgument('k', "key", MetaVar = "Key", Required = true)]
         public string KeyFilePath { get; set; }
 
-        [NamedArgument('o', "output", MetaVar = "OutputDirectory", Required = true)]
+        [NamedArgument('o', "out", MetaVar = "OutputDirectory", Required = true)]
         public string OutputDirectoryPath { get; set; }
 
         [NamedArgument(
