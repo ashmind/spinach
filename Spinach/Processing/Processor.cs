@@ -13,24 +13,32 @@ namespace Spinach.Processing {
             var assemblies = LoadAssemblies(arguments);
             var assembliesByName = assemblies.ToDictionary(d => d.Name.Name);
             DetectReferences(assembliesByName);
+            MarkAssembliesToSign(assemblies, arguments);
 
             FluentConsole.NewLine().White.Line("Processing");
-            // by default, it would sign only the assemblies that do not have public keys, 
-            // or assemblies referencing those (recursively)
-            var assembliesToSign = GetAssembliesToSign(assemblies, arguments);
-            SignOrCopy(assemblies, arguments, assembliesToSign);
+            SignOrCopy(assemblies, arguments);
 
             FluentConsole.NewLine().White.Line("References");
-            UpdateReferences(assembliesToSign.AsReadOnlyCollection(), arguments);
+            UpdateReferences(assemblies, arguments);
         }
 
-        private static ISet<AssemblyDetails> GetAssembliesToSign(IEnumerable<AssemblyDetails> assemblies, Arguments arguments) {
-            if (arguments.SignAll)
-                return assemblies.AsSet();
+        private static void MarkAssembliesToSign(IEnumerable<AssemblyDetails> assemblies, Arguments arguments) {
+            // ReSharper disable once PossibleMultipleEnumeration
+            var assembliesToSign = assemblies;
+            if (!arguments.SignAll) {
+                // by default, it would sign only the assemblies that do not have public keys, 
+                // or assemblies referencing those (recursively)
 
-            return assemblies.Where(a => !a.Name.HasPublicKey)
-                .SelectRecursive(a => a.ReferencedBy)
-                .AsSet();
+                // ReSharper disable once PossibleMultipleEnumeration
+                assembliesToSign = assemblies
+                    .Where(a => !a.Name.HasPublicKey)
+                    .SelectRecursive(a => a.ReferencedBy)
+                    .AsSet();
+            }
+
+            foreach (var assembly in assembliesToSign) {
+                assembly.NeedsToBeSigned = true;
+            }
         }
 
         private static void DetectReferences(IDictionary<string, AssemblyDetails> assemblies) {
@@ -57,13 +65,20 @@ namespace Spinach.Processing {
             return assemblies;
         }
 
-        private void SignOrCopy(IReadOnlyList<AssemblyDetails> assemblies, Arguments arguments, ISet<AssemblyDetails> assembliesToSign) {
+        private void SignOrCopy(IReadOnlyList<AssemblyDetails> assemblies, Arguments arguments) {
             foreach (var details in assemblies) {
                 var name = details.Name;
                 FluentConsole.Line("  {0}", name.Name)
                              .Line("    => {0}", details.TargetPath);
 
-                if (!assembliesToSign.Contains(details)) {
+                if (arguments.Skip == SkipMode.Existing && File.Exists(details.TargetPath)) {
+                    FluentConsole.Line("    Already exists, skipping.");
+                    details.NeedsToBeSigned = false;
+                    details.Assembly = AssemblyDefinition.ReadAssembly(details.TargetPath);
+                    continue;
+                }
+
+                if (!details.NeedsToBeSigned) {
                     FluentConsole.Line("    No need to re-sign (copying as is).");
                     File.Copy(details.SourcePath, details.TargetPath);
                     continue;
@@ -85,9 +100,10 @@ namespace Spinach.Processing {
             }
         }
 
-        private void UpdateReferences(IReadOnlyCollection<AssemblyDetails> assembliesToUpdate, Arguments arguments) {
+        private void UpdateReferences(IReadOnlyCollection<AssemblyDetails> assemblies, Arguments arguments) {
+            var assembliesToUpdate = assemblies.Where(a => a.NeedsToBeSigned);
             var byName = assembliesToUpdate.ToDictionary(a => a.Name.Name);
-            foreach (var details in assembliesToUpdate) {
+            foreach (var details in byName.Values) {
                 FluentConsole.Line("  {0}", details.Name.Name);
                 foreach (var reference in details.Assembly.MainModule.AssemblyReferences) {
                     var target = byName.GetValueOrDefault(reference.Name);
